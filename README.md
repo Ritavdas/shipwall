@@ -8,7 +8,7 @@ typed**, then the project flips onto a live wall.
 
 ```
 QR  →  GitHub sign-in  →  paste link  →  auto-enrich  →  Ship Wall + share card
-        (identity+token)   (1 field)     (derive, don't ask)   (the reward)
+        (identity only)    (1 field)     (derive, don't ask)   (the reward)
 ```
 
 ## Why it's gamified with ~zero extra friction
@@ -21,9 +21,9 @@ Every game reward comes from **identity + the project link** — never a new fie
 - **City counter** — projects shipped, the exact KPI, live on the wall.
 - **Needs chips** — one tap (`Compute / API credits / Design / Distribution / Mentorship`) builds the grant/credit dataset without feeling like a form.
 
-Private repos work too: read with the builder's own token, or — for
-GitLab/no-code/deploy-only projects — we gamify the **ship** (title + live
-screenshot via Microlink), not the source.
+Public GitHub repos auto-enrich from their languages and README. For private
+projects, submit a live, deploy, or demo URL instead; ShipWall enriches the
+**ship** (title + live screenshot via Microlink), not private source code.
 
 ## Stack
 
@@ -98,6 +98,5 @@ Vercel AI SDK → OpenRouter, `domain` / `infra` split).
 
 ## Roadmap (v2)
 
-Cross-city streaks & levels · reactions on cards · re-enrich job when a private
-repo later goes public · fine-grained GitHub App (per-repo grant) · realtime
-wall (websocket instead of polling).
+Cross-city streaks & levels · reactions on cards · opt-in fine-grained GitHub
+App (per-repo grant) · realtime wall (websocket instead of polling).

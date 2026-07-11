@@ -45,8 +45,8 @@ export default async function SubmitPage({
             Sign in with GitHub
           </button>
           <p className="mt-3 text-center text-xs text-muted">
-            One tap = your identity + auto-filled project. We read only languages
-            &amp; README.
+            GitHub grants identity and email only. Public repos can auto-fill
+            from their languages &amp; README.
           </p>
         </form>
       ) : (

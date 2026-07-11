@@ -31,8 +31,8 @@ function headers(token?: string): HeadersInit {
 }
 
 /**
- * Read languages + README with the signed-in builder's token, so this works
- * for their own PRIVATE repos too — not just public ones.
+ * Read languages and README from public repositories. Reuse a signed-in
+ * builder's token when available, but do not request private-repository access.
  */
 export async function enrichGitHub(
   url: string,

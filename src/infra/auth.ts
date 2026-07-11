@@ -3,12 +3,9 @@ import GitHub from "next-auth/providers/github";
 import { env } from "@/infra/env";
 
 /**
- * GitHub sign-in isn't just identity — it's authorization. We request `repo`
- * scope so we can read the builder's OWN private repos (languages + README)
- * server-side with their token. JWT strategy => no DB adapter needed to boot.
- *
- * v2 note: swap this OAuth scope for a fine-grained GitHub App (per-repo grant)
- * to lower the trust cost. Kept as classic OAuth for MVP speed.
+ * GitHub sign-in is limited to identity and email. Public repository enrichment
+ * can reuse the token for GitHub API rate limits without requesting repo access.
+ * JWT strategy means no database adapter is needed to boot.
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -17,7 +14,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     GitHub({
       clientId: env.AUTH_GITHUB_ID ?? "",
       clientSecret: env.AUTH_GITHUB_SECRET ?? "",
-      authorization: { params: { scope: "read:user user:email repo" } },
+      authorization: { params: { scope: "read:user user:email" } },
     }),
   ],
   callbacks: {

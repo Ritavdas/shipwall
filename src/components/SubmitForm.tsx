@@ -127,8 +127,8 @@ export function SubmitForm({
             className="rounded-xl border border-border bg-card px-4 py-3 text-base outline-none focus:border-accent"
           />
           <p className="text-xs text-muted">
-            We auto-fill the title, stack, and description — public or your own
-            private repo. No repo? A live/deploy link works too.
+            Public GitHub repos auto-fill from their languages and README. For a
+            private project, paste its live, deploy, or demo URL instead.
           </p>
           <button
             type="submit"

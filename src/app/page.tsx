@@ -28,7 +28,7 @@ export default function Home() {
       <div className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
           ["10-second submit", "Sign in, paste link. Stack + summary are derived, not typed."],
-          ["Private repos work", "Read with the builder's own token, or gamify the live demo."],
+          ["Public repos auto-fill", "Private project? Submit its live, deploy, or demo URL instead."],
           ["Grant-ready data", "Count, stacks, and what builders need next — exportable per city."],
         ].map(([t, d]) => (
           <div key={t} className="rounded-2xl border border-border bg-card p-4">
