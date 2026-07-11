@@ -4,7 +4,10 @@ import {
   text,
   timestamp,
   boolean,
+  integer,
+  pgEnum,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -34,6 +37,12 @@ export const builders = pgTable("builders", {
     .defaultNow(),
 });
 
+export const projectMediaKind = pgEnum("project_media_kind", [
+  "image",
+  "pdf",
+  "video",
+]);
+
 export const submissions = pgTable(
   "submissions",
   {
@@ -61,6 +70,30 @@ export const submissions = pgTable(
   (t) => [index("submissions_event_idx").on(t.eventId)],
 );
 
+export const projectMedia = pgTable(
+  "project_media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => submissions.id, { onDelete: "cascade" }),
+    kind: projectMediaKind("kind").notNull(),
+    url: text("url").notNull(),
+    altText: text("alt_text"),
+    caption: text("caption"),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("project_media_submission_position_idx").on(
+      t.submissionId,
+      t.position,
+    ),
+  ],
+);
+
 export const badges = pgTable("badges", {
   id: uuid("id").primaryKey().defaultRandom(),
   builderId: uuid("builder_id")
@@ -78,4 +111,5 @@ export const badges = pgTable("badges", {
 export type Event = typeof events.$inferSelect;
 export type Builder = typeof builders.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
+export type ProjectMedia = typeof projectMedia.$inferSelect;
 export type Badge = typeof badges.$inferSelect;

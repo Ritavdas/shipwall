@@ -26,6 +26,11 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+:where(a, button, input, textarea, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 @keyframes pop-in {
   from {
     opacity: 0;
@@ -39,4 +44,11 @@ body {
 
 .pop-in {
   animation: pop-in 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pop-in,
+  .animate-pulse {
+    animation: none;
+  }
 }

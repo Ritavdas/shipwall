@@ -1,20 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import type { Enrichment } from "@/domain/enrichment";
+import type { ProjectMediaInput, ProjectMediaKind } from "@/domain/media";
 import { NEEDS } from "@/domain/needs";
 
 type Phase = "idle" | "enriching" | "preview" | "submitting" | "done" | "error";
+type EditableMedia = ProjectMediaInput & { id: string };
 
 export function SubmitForm({
   eventSlug,
   login,
   avatarUrl,
+  appUrl,
 }: {
   eventSlug: string;
   login: string;
   avatarUrl?: string | null;
+  appUrl: string;
 }) {
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -24,6 +29,7 @@ export function SubmitForm({
   const [description, setDescription] = useState("");
   const [problem, setProblem] = useState("");
   const [needs, setNeeds] = useState<string[]>([]);
+  const [media, setMedia] = useState<EditableMedia[]>([]);
   const [resultId, setResultId] = useState<string | null>(null);
 
   async function handleEnrich(e: React.FormEvent) {
@@ -43,6 +49,19 @@ export function SubmitForm({
       setEnrichment(enr);
       setTitle(enr.title);
       setDescription(enr.description);
+      setMedia(
+        enr.screenshotUrl
+          ? [
+              {
+                id: crypto.randomUUID(),
+                kind: "image",
+                url: enr.screenshotUrl,
+                altText: `${enr.title} project preview`,
+                caption: "",
+              },
+            ]
+          : [],
+      );
       setPhase("preview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -66,6 +85,7 @@ export function SubmitForm({
           problem: problem.trim(),
           repoUrl: enrichment.repoUrl,
           screenshotUrl: enrichment.screenshotUrl,
+          media: media.map(({ id: _id, ...item }) => item),
           source: enrichment.source,
           stack: enrichment.stack,
           needs,
@@ -78,7 +98,7 @@ export function SubmitForm({
       setPhase("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
-      setPhase("error");
+      setPhase("preview");
     }
   }
 
@@ -89,7 +109,14 @@ export function SubmitForm({
   }
 
   if (phase === "done" && resultId) {
-    return <DoneCard id={resultId} title={title} eventSlug={eventSlug} />;
+    return (
+      <DoneCard
+        id={resultId}
+        title={title}
+        eventSlug={eventSlug}
+        appUrl={appUrl}
+      />
+    );
   }
 
   return (
@@ -144,19 +171,28 @@ export function SubmitForm({
       ) : null}
 
       {(phase === "preview" || phase === "submitting") && enrichment ? (
-        <div className="flex flex-col gap-4">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
+          className="flex flex-col gap-4"
+        >
           {enrichment.screenshotUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={enrichment.screenshotUrl}
-              alt=""
+              alt={`${title || enrichment.title} project preview`}
               className="aspect-video w-full rounded-xl border border-border object-cover"
             />
           ) : null}
 
+          <MediaEditor media={media} setMedia={setMedia} title={title} />
+
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted">Project</label>
             <input
+              required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="rounded-lg border border-border bg-card px-3 py-2 text-lg font-semibold outline-none focus:border-accent"
@@ -229,41 +265,295 @@ export function SubmitForm({
           </div>
 
           <button
-            onClick={handleSubmit}
+            type="submit"
             disabled={phase === "submitting"}
             className="mt-1 rounded-xl bg-accent px-4 py-3 text-base font-semibold text-[#0a0e1a] transition hover:opacity-90 disabled:opacity-60"
           >
             {phase === "submitting" ? "Shipping…" : "Ship it 🚀"}
           </button>
+          {error ? (
+            <p role="alert" className="text-sm text-red-300">
+              {error}
+            </p>
+          ) : null}
           <button
             type="button"
-            onClick={() => setPhase("idle")}
+            onClick={() => {
+              setPhase("idle");
+              setEnrichment(null);
+              setMedia([]);
+            }}
             className="text-xs text-muted underline"
           >
             ← use a different link
           </button>
-        </div>
+        </form>
       ) : null}
     </div>
   );
+}
+
+function MediaEditor({
+  media,
+  setMedia,
+  title,
+}: {
+  media: EditableMedia[];
+  setMedia: React.Dispatch<React.SetStateAction<EditableMedia[]>>;
+  title: string;
+}) {
+  function add(kind: ProjectMediaKind) {
+    if (media.length >= 12) return;
+    setMedia((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        kind,
+        url: "",
+        altText: kind === "image" ? `${title || "Project"} image` : "",
+        caption: "",
+      },
+    ]);
+  }
+
+  function update(id: string, patch: Partial<ProjectMediaInput>) {
+    setMedia((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    );
+  }
+
+  function move(index: number, delta: -1 | 1) {
+    setMedia((current) => {
+      const target = index + delta;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target]!, next[index]!];
+      return next;
+    });
+  }
+
+  return (
+    <details className="rounded-xl border border-border bg-card p-4">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold">
+        <span>Project media (optional)</span>
+        <span className="shrink-0 text-xs font-normal text-muted">
+          {media.length}/12
+        </span>
+      </summary>
+      <div className="mt-2">
+        <p className="text-xs leading-5 text-muted">
+          Your derived screenshot is already included. Add a deck or video only
+          if it helps tell the story.
+        </p>
+
+        {media.length === 0 ? (
+          <p className="mt-4 rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted">
+            No media selected. The project can still be published.
+          </p>
+        ) : (
+          <div className="mt-4 flex flex-col gap-3">
+          {media.map((item, index) => {
+            const prefix = `media-${item.id}`;
+            return (
+              <fieldset
+                key={item.id}
+                className="min-w-0 rounded-lg border border-border p-3"
+              >
+                <legend className="px-1 text-xs font-medium text-muted">
+                  {index + 1}. {mediaKindLabel(item.kind)}
+                </legend>
+
+                <div className="grid min-w-0 gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
+                  <div>
+                    <label
+                      htmlFor={`${prefix}-kind`}
+                      className="text-xs text-muted"
+                    >
+                      Type
+                    </label>
+                    <select
+                      id={`${prefix}-kind`}
+                      value={item.kind}
+                      onChange={(event) => {
+                        const kind = event.target.value as ProjectMediaKind;
+                        update(item.id, {
+                          kind,
+                          altText:
+                            kind === "image" && !item.altText
+                              ? `${title || "Project"} image`
+                              : item.altText,
+                        });
+                      }}
+                      className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm"
+                    >
+                      <option value="image">Image</option>
+                      <option value="pdf">PDF deck</option>
+                      <option value="video">Video</option>
+                    </select>
+                  </div>
+
+                  <div className="min-w-0">
+                    <label
+                      htmlFor={`${prefix}-url`}
+                      className="text-xs text-muted"
+                    >
+                      HTTPS URL
+                    </label>
+                    <input
+                      id={`${prefix}-url`}
+                      type="url"
+                      required
+                      value={item.url}
+                      onChange={(event) =>
+                        update(item.id, { url: event.target.value })
+                      }
+                      placeholder={mediaUrlPlaceholder(item.kind)}
+                      className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <label
+                      htmlFor={`${prefix}-alt`}
+                      className="text-xs text-muted"
+                    >
+                      {item.kind === "image"
+                        ? "Image description"
+                        : "Accessible title (optional)"}
+                    </label>
+                    <input
+                      id={`${prefix}-alt`}
+                      required={item.kind === "image"}
+                      value={item.altText}
+                      onChange={(event) =>
+                        update(item.id, { altText: event.target.value })
+                      }
+                      placeholder={
+                        item.kind === "image"
+                          ? "Describe what the image shows"
+                          : "Name this media"
+                      }
+                      className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-sm"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label
+                      htmlFor={`${prefix}-caption`}
+                      className="text-xs text-muted"
+                    >
+                      Caption (optional)
+                    </label>
+                    <input
+                      id={`${prefix}-caption`}
+                      value={item.caption}
+                      onChange={(event) =>
+                        update(item.id, { caption: event.target.value })
+                      }
+                      placeholder="Add context for viewers"
+                      className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => move(index, -1)}
+                    disabled={index === 0}
+                    className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
+                  >
+                    Move up
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => move(index, 1)}
+                    disabled={index === media.length - 1}
+                    className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
+                  >
+                    Move down
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMedia((current) =>
+                        current.filter((entry) => entry.id !== item.id),
+                      )
+                    }
+                    className="min-h-11 rounded-lg border border-border px-3 text-xs text-red-300 hover:border-red-300"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </fieldset>
+            );
+          })}
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => add("image")}
+            disabled={media.length >= 12}
+            className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
+          >
+            + Image
+          </button>
+          <button
+            type="button"
+            onClick={() => add("pdf")}
+            disabled={media.length >= 12}
+            className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
+          >
+            + PDF deck
+          </button>
+          <button
+            type="button"
+            onClick={() => add("video")}
+            disabled={media.length >= 12}
+            className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
+          >
+            + Video
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          Video embeds support YouTube, Vimeo, and Loom.
+        </p>
+      </div>
+    </details>
+  );
+}
+
+function mediaKindLabel(kind: ProjectMediaKind) {
+  if (kind === "pdf") return "PDF deck";
+  return kind[0]!.toUpperCase() + kind.slice(1);
+}
+
+function mediaUrlPlaceholder(kind: ProjectMediaKind) {
+  if (kind === "video") return "https://youtube.com/watch?v=…";
+  if (kind === "pdf") return "https://example.com/deck.pdf";
+  return "https://example.com/screenshot.png";
 }
 
 function DoneCard({
   id,
   title,
   eventSlug,
+  appUrl,
 }: {
   id: string;
   title: string;
   eventSlug: string;
+  appUrl: string;
 }) {
-  const [origin, setOrigin] = useState("");
-  if (typeof window !== "undefined" && !origin) setOrigin(window.location.origin);
-  const wallUrl = `${origin}/e/${eventSlug}`;
+  const projectPath = `/projects/${id}`;
+  const projectUrl = `${appUrl.replace(/\/$/, "")}${projectPath}`;
   const tweet = `I shipped ${title} 🚀`;
   const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
     tweet,
-  )}&url=${encodeURIComponent(wallUrl)}`;
+  )}&url=${encodeURIComponent(projectUrl)}`;
 
   return (
     <div className="w-full max-w-md pop-in text-center">
@@ -281,6 +571,18 @@ function DoneCard({
       />
 
       <div className="mt-6 flex flex-col gap-3">
+        <Link
+          href={projectPath}
+          className="rounded-xl border border-border px-4 py-3 font-medium hover:border-accent"
+        >
+          View your project →
+        </Link>
+        <Link
+          href={`/e/${eventSlug}`}
+          className="rounded-xl border border-border px-4 py-3 font-medium hover:border-accent"
+        >
+          See the Ship Wall
+        </Link>
         <a
           href={xUrl}
           target="_blank"
@@ -288,12 +590,6 @@ function DoneCard({
           className="rounded-xl bg-accent px-4 py-3 font-semibold text-[#0a0e1a] hover:opacity-90"
         >
           Post to X
-        </a>
-        <a
-          href={wallUrl}
-          className="rounded-xl border border-border px-4 py-3 font-medium hover:border-accent"
-        >
-          See the Ship Wall →
         </a>
       </div>
     </div>

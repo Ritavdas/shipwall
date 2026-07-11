@@ -12,15 +12,21 @@ import {
 import { computeBadges } from "@/domain/badges";
 import { normalizeStack } from "@/domain/stack";
 import { normalizeNeeds } from "@/domain/needs";
+import {
+  normalizeProjectMedia,
+  projectMediaInputSchema,
+  webUrlSchema,
+} from "@/domain/media";
 
 const Body = z.object({
   eventSlug: z.string().min(1),
-  projectUrl: z.string().min(1),
+  projectUrl: webUrlSchema,
   title: z.string().min(1).max(120),
   description: z.string().max(400).optional().default(""),
   problem: z.string().max(400).optional().default(""),
-  repoUrl: z.string().optional(),
-  screenshotUrl: z.string().optional(),
+  repoUrl: webUrlSchema.optional(),
+  screenshotUrl: webUrlSchema.optional(),
+  media: z.array(projectMediaInputSchema).max(12).optional(),
   source: z.enum(["github", "link"]).default("link"),
   stack: z.array(z.string()).default([]),
   needs: z.array(z.string()).default([]),
@@ -42,7 +48,10 @@ export async function POST(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return Response.json({ error: "Invalid submission." }, { status: 400 });
+    return Response.json(
+      { error: "Check the project details and media URLs, then try again." },
+      { status: 400 },
+    );
   }
   const input = parsed.data;
 
@@ -61,21 +70,40 @@ export async function POST(req: Request) {
   const prior = await countBuilderSubmissions(builder.id);
   const stack = normalizeStack(input.stack);
   const needs = normalizeNeeds(input.needs);
+  const media = (
+    input.media ??
+    (input.screenshotUrl
+      ? [
+          {
+            kind: "image" as const,
+            url: input.screenshotUrl,
+            altText: `${input.title} project preview`,
+            caption: "",
+          },
+        ]
+      : [])
+  ).map(normalizeProjectMedia);
+  const screenshotUrl =
+    media.find((item) => item.kind === "image")?.url ??
+    (input.media === undefined ? input.screenshotUrl : undefined);
 
-  const submission = await createSubmission({
-    eventId: event.id,
-    builderId: builder.id,
-    title: input.title,
-    description: input.description || null,
-    problem: input.problem || null,
-    projectUrl: input.projectUrl,
-    repoUrl: input.repoUrl || null,
-    source: input.source,
-    stack,
-    needs,
-    screenshotUrl: input.screenshotUrl || null,
-    isAi: input.isAi,
-  });
+  const submission = await createSubmission(
+    {
+      eventId: event.id,
+      builderId: builder.id,
+      title: input.title,
+      description: input.description || null,
+      problem: input.problem || null,
+      projectUrl: input.projectUrl,
+      repoUrl: input.repoUrl || null,
+      source: input.source,
+      stack,
+      needs,
+      screenshotUrl: screenshotUrl || null,
+      isAi: input.isAi,
+    },
+    media,
+  );
 
   const badgeKinds = computeBadges({
     priorSubmissionCount: prior,

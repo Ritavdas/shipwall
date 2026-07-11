@@ -4,7 +4,10 @@ import { createEvent, listEvents, getEventBySlug } from "@/infra/store";
 
 function noDb() {
   return Response.json(
-    { error: "Server has no DATABASE_URL configured." },
+    {
+      error:
+        "Organizer setup is not ready. Add DATABASE_URL, run npm run db:push, and restart ShipWall.",
+    },
     { status: 503 },
   );
 }
@@ -13,7 +16,13 @@ function noDb() {
 export async function POST(req: Request) {
   if (!flags.hasDb) return noDb();
   if (!isAdmin(req)) {
-    return Response.json({ error: "Unauthorized." }, { status: 401 });
+    return Response.json(
+      {
+        error:
+          "Organizer token was not accepted. Enter the current ADMIN_TOKEN and save it before retrying.",
+      },
+      { status: 401 },
+    );
   }
   const body = (await req.json().catch(() => null)) as {
     name?: string;
@@ -41,7 +50,13 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   if (!flags.hasDb) return Response.json([]);
   if (!isAdmin(req)) {
-    return Response.json({ error: "Unauthorized." }, { status: 401 });
+    return Response.json(
+      {
+        error:
+          "Organizer token was not accepted. Enter the current ADMIN_TOKEN and save it before retrying.",
+      },
+      { status: 401 },
+    );
   }
   return Response.json(await listEvents());
 }

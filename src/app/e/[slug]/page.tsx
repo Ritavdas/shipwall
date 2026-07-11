@@ -21,13 +21,14 @@ export default async function EventWallPage({
   if (!event) notFound();
 
   const cards = await listSubmissionCards(event.id);
+  const wallCards = cards.map(({ createdAt: _createdAt, ...card }) => card);
 
   return (
     <Wall
       slug={event.slug}
       eventName={event.name}
       city={event.city}
-      initial={cards}
+      initial={wallCards}
     />
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { auth, signIn } from "@/infra/auth";
-import { flags } from "@/infra/env";
+import { env, flags } from "@/infra/env";
 import { getEventBySlug } from "@/infra/store";
 import { SubmitForm } from "@/components/SubmitForm";
 
@@ -11,13 +12,17 @@ export default async function SubmitPage({
 }) {
   const { slug } = await params;
   const event = flags.hasDb ? await getEventBySlug(slug) : null;
+  if (flags.hasDb && !event) notFound();
   const session = await auth();
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-md flex-col justify-center px-6 py-12">
       <div className="mb-8">
-        <Link href={`/e/${slug}`} className="text-sm text-accent">
-          {event ? event.name : "ShipWall"}
+        <Link
+          href={`/e/${slug}`}
+          className="inline-flex min-h-11 items-center rounded-lg pr-3 text-sm text-accent"
+        >
+          ← {event ? event.name : "ShipWall"}
         </Link>
         <h1 className="mt-1 text-2xl font-bold">Ship your project 🚀</h1>
         {event ? (
@@ -54,6 +59,7 @@ export default async function SubmitPage({
           eventSlug={slug}
           login={session.login}
           avatarUrl={session.avatarUrl}
+          appUrl={env.APP_URL}
         />
       )}
     </main>

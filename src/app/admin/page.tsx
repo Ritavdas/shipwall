@@ -34,23 +34,27 @@ export default function AdminPage() {
   }, []);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/events", {
-      headers: { "x-admin-token": token },
-    });
-    if (!res.ok) {
-      setError("Could not load events (check your organizer token).");
-      return;
+    setError("");
+    try {
+      const res = await fetch("/api/events", {
+        headers: { "x-admin-token": token },
+      });
+      if (!res.ok) {
+        throw new Error(await responseError(res, "Could not load events."));
+      }
+      const data = (await res.json()) as EventRow[];
+      setEvents(data);
+      const origin = window.location.origin;
+      const entries = await Promise.all(
+        data.map(async (e) => {
+          const url = `${origin}/e/${e.slug}/submit`;
+          return [e.slug, await QRCode.toDataURL(url, { margin: 1, width: 240 })] as const;
+        }),
+      );
+      setQr(Object.fromEntries(entries));
+    } catch (error) {
+      setError(actionableError(error, "Could not load events."));
     }
-    const data = (await res.json()) as EventRow[];
-    setEvents(data);
-    const origin = window.location.origin;
-    const entries = await Promise.all(
-      data.map(async (e) => {
-        const url = `${origin}/e/${e.slug}/submit`;
-        return [e.slug, await QRCode.toDataURL(url, { margin: 1, width: 240 })] as const;
-      }),
-    );
-    setQr(Object.fromEntries(entries));
   }, [token]);
 
   useEffect(() => {
@@ -72,14 +76,15 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json", "x-admin-token": token },
         body: JSON.stringify({ name, city, eventDate: eventDate || undefined }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed");
+      if (!res.ok) {
+        throw new Error(await responseError(res, "Could not create the event."));
+      }
       setName("");
       setCity("");
       setEventDate("");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      setError(actionableError(err, "Could not create the event."));
     } finally {
       setBusy(false);
     }
@@ -93,46 +98,63 @@ export default function AdminPage() {
       </p>
 
       <section className="mt-8 rounded-2xl border border-border bg-card p-5">
-        <label className="text-sm font-medium">Organizer token</label>
-        <div className="mt-2 flex gap-2">
+        <label htmlFor="organizer-token" className="text-sm font-medium">
+          Organizer token
+        </label>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <input
+            id="organizer-token"
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="value of ADMIN_TOKEN (blank = open in local dev)"
-            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+            className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
           />
           <button
             onClick={saveToken}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-[#0a0e1a]"
+            className="min-h-11 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-[#0a0e1a]"
           >
             Save
           </button>
         </div>
+        <p className="mt-2 text-xs text-muted">
+          Production organizers need DATABASE_URL, a pushed schema, and the
+          current ADMIN_TOKEN.
+        </p>
       </section>
 
       <section className="mt-6 rounded-2xl border border-border bg-card p-5">
         <h2 className="font-semibold">New event</h2>
         <form onSubmit={createEvent} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Event name"
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
-          />
-          <input
-            required
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            placeholder="City"
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
-          />
-          <input
-            type="date"
-            value={eventDate}
-            onChange={(e) => setEventDate(e.target.value)}
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted outline-none focus:border-accent"
-          />
+          <label className="text-xs text-muted">
+            Event name
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ship night"
+              className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+            />
+          </label>
+          <label className="text-xs text-muted">
+            City
+            <input
+              required
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="Bengaluru"
+              className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+            />
+          </label>
+          <label htmlFor="event-date" className="text-xs text-muted">
+            Event date (optional)
+            <input
+              id="event-date"
+              type="date"
+              value={eventDate}
+              onChange={(e) => setEventDate(e.target.value)}
+              className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+            />
+          </label>
           <button
             disabled={busy}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-[#0a0e1a] disabled:opacity-60 sm:col-span-3"
@@ -140,7 +162,11 @@ export default function AdminPage() {
             {busy ? "Creating…" : "Create event"}
           </button>
         </form>
-        {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
+        {error ? (
+          <p role="alert" className="mt-3 text-sm leading-6 text-red-300">
+            {error}
+          </p>
+        ) : null}
       </section>
 
       <section className="mt-6 flex flex-col gap-4">
@@ -194,4 +220,18 @@ export default function AdminPage() {
       </section>
     </main>
   );
+}
+
+async function responseError(response: Response, fallback: string) {
+  const data = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+  return data?.error || fallback;
+}
+
+function actionableError(error: unknown, fallback: string) {
+  if (error instanceof TypeError) {
+    return "Could not reach ShipWall. Check that the app is running and your connection is available, then retry.";
+  }
+  return error instanceof Error ? error.message : fallback;
 }

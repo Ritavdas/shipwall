@@ -1,13 +1,17 @@
-import { eq, desc, inArray, count } from "drizzle-orm";
+import { eq, desc, asc, inArray, count } from "drizzle-orm";
 import { requireDb } from "@/infra/db/client";
 import {
   events,
   builders,
   submissions,
+  projectMedia,
   badges,
-  type Submission,
 } from "@/infra/db/schema";
 import type { BadgeKind } from "@/domain/badges";
+import type {
+  ProjectMediaInput,
+  ProjectMediaKind,
+} from "@/domain/media";
 
 export type SubmissionCard = {
   id: string;
@@ -24,6 +28,25 @@ export type SubmissionCard = {
   createdAt: Date;
   builder: { handle: string; name: string | null; avatarUrl: string | null };
   badges: string[];
+};
+
+export type ProjectMediaItem = {
+  id: string;
+  kind: ProjectMediaKind;
+  url: string;
+  altText: string | null;
+  caption: string | null;
+  position: number;
+};
+
+export type ProjectDetail = SubmissionCard & {
+  event: {
+    slug: string;
+    name: string;
+    city: string;
+    eventDate: string | null;
+  };
+  media: ProjectMediaItem[];
 };
 
 export async function getEventBySlug(slug: string) {
@@ -81,10 +104,29 @@ export async function countBuilderSubmissions(builderId: string) {
 
 export async function createSubmission(
   input: Omit<typeof submissions.$inferInsert, "id" | "createdAt">,
-): Promise<Submission> {
+  media: ProjectMediaInput[],
+) {
   const db = requireDb();
-  const rows = await db.insert(submissions).values(input).returning();
-  return rows[0]!;
+  const id = crypto.randomUUID();
+  const submissionQuery = db.insert(submissions).values({ ...input, id });
+
+  if (media.length > 0) {
+    const mediaQuery = db.insert(projectMedia).values(
+      media.map((item, position) => ({
+        submissionId: id,
+        kind: item.kind,
+        url: item.url,
+        altText: item.altText || null,
+        caption: item.caption || null,
+        position,
+      })),
+    );
+    await db.batch([submissionQuery, mediaQuery]);
+  } else {
+    await submissionQuery;
+  }
+
+  return { id };
 }
 
 export async function awardBadges(
@@ -179,9 +221,7 @@ export async function getShareCard(id: string): Promise<ShareCard | null> {
   return rows[0] ?? null;
 }
 
-export async function getSubmissionCard(
-  id: string,
-): Promise<SubmissionCard | null> {
+export async function getProjectDetail(id: string): Promise<ProjectDetail | null> {
   const db = requireDb();
   const rows = await db
     .select({
@@ -191,6 +231,8 @@ export async function getSubmissionCard(
       avatarUrl: builders.avatarUrl,
       city: events.city,
       eventName: events.name,
+      eventSlug: events.slug,
+      eventDate: events.eventDate,
     })
     .from(submissions)
     .innerJoin(builders, eq(submissions.builderId, builders.id))
@@ -199,6 +241,39 @@ export async function getSubmissionCard(
     .limit(1);
   const r = rows[0];
   if (!r) return null;
+
+  const [badgeRows, mediaRows] = await Promise.all([
+    db.select().from(badges).where(eq(badges.submissionId, id)),
+    db
+      .select()
+      .from(projectMedia)
+      .where(eq(projectMedia.submissionId, id))
+      .orderBy(asc(projectMedia.position)),
+  ]);
+
+  const media: ProjectMediaItem[] =
+    mediaRows.length > 0
+      ? mediaRows.map((item) => ({
+          id: item.id,
+          kind: item.kind,
+          url: item.url,
+          altText: item.altText,
+          caption: item.caption,
+          position: item.position,
+        }))
+      : r.s.screenshotUrl
+        ? [
+            {
+              id: `legacy-${r.s.id}`,
+              kind: "image",
+              url: r.s.screenshotUrl,
+              altText: `${r.s.title} project preview`,
+              caption: null,
+              position: 0,
+            },
+          ]
+        : [];
+
   return {
     id: r.s.id,
     title: r.s.title,
@@ -213,6 +288,13 @@ export async function getSubmissionCard(
     isAi: r.s.isAi,
     createdAt: r.s.createdAt,
     builder: { handle: r.handle, name: r.name, avatarUrl: r.avatarUrl },
-    badges: [],
+    badges: badgeRows.map((badge) => badge.kind),
+    event: {
+      slug: r.eventSlug,
+      name: r.eventName,
+      city: r.city,
+      eventDate: r.eventDate,
+    },
+    media,
   };
 }

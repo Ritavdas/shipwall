@@ -1,7 +1,11 @@
 "use client";
 
+import Image, { type ImageLoader } from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BADGES, type BadgeKind } from "@/domain/badges";
+
+const passthroughLoader: ImageLoader = ({ src }) => src;
 
 export type WallCard = {
   id: string;
@@ -31,6 +35,7 @@ export function Wall({
   initial: WallCard[];
 }) {
   const [cards, setCards] = useState<WallCard[]>(initial);
+  const [refreshError, setRefreshError] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -39,11 +44,18 @@ export function Wall({
         const res = await fetch(`/api/submissions?event=${slug}`, {
           cache: "no-store",
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (alive) setRefreshError(true);
+          return;
+        }
         const data = await res.json();
-        if (alive && Array.isArray(data.submissions)) setCards(data.submissions);
-      } catch {
-        // ignore transient errors, keep last good state
+        if (alive && Array.isArray(data.submissions)) {
+          setCards(data.submissions);
+          setRefreshError(false);
+        }
+      } catch (error) {
+        console.error("Could not refresh the Ship Wall.", error);
+        if (alive) setRefreshError(true);
       }
     };
     const iv = setInterval(tick, 5000);
@@ -69,12 +81,12 @@ export function Wall({
               projects shipped
             </div>
           </div>
-          <a
+          <Link
             href={`/e/${slug}/submit`}
             className="rounded-xl bg-accent px-4 py-2.5 font-semibold text-[#0a0e1a] hover:opacity-90"
           >
             + Ship yours
-          </a>
+          </Link>
         </div>
       </header>
 
@@ -89,23 +101,30 @@ export function Wall({
           ))}
         </div>
       )}
+      {refreshError ? (
+        <p role="status" className="mt-4 text-center text-xs text-muted">
+          Live refresh is paused. Showing the latest projects already loaded.
+        </p>
+      ) : null}
     </div>
   );
 }
 
 function ProjectCard({ card }: { card: WallCard }) {
   return (
-    <a
-      href={card.projectUrl}
-      target="_blank"
-      rel="noreferrer"
-      className="pop-in flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition hover:border-accent"
+    <Link
+      href={`/projects/${card.id}`}
+      className="pop-in flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card transition hover:border-accent"
     >
       {card.screenshotUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
+          loader={passthroughLoader}
+          unoptimized
           src={card.screenshotUrl}
-          alt=""
+          alt={`${card.title} project preview`}
+          width={800}
+          height={450}
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           className="aspect-video w-full object-cover"
         />
       ) : null}
@@ -156,21 +175,25 @@ function ProjectCard({ card }: { card: WallCard }) {
 
         <div className="mt-auto flex items-center gap-2 pt-1 text-xs text-muted">
           {card.builder.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
+              loader={passthroughLoader}
+              unoptimized
               src={card.builder.avatarUrl}
               alt=""
+              width={20}
+              height={20}
               className="h-5 w-5 rounded-full"
             />
           ) : null}
           <span>@{card.builder.handle}</span>
+          <span className="ml-auto font-medium text-accent">View project →</span>
           {card.needs.length ? (
-            <span className="ml-auto truncate text-[11px]">
+            <span className="w-full truncate text-[11px]">
               needs: {card.needs.join(", ")}
             </span>
           ) : null}
         </div>
       </div>
-    </a>
+    </Link>
   );
 }
