@@ -4,8 +4,10 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 import { BADGES, type BadgeKind } from "@/domain/badges";
 import { MediaGallery } from "@/components/MediaGallery";
+import { ProjectDiscussion } from "@/components/ProjectDiscussion";
+import { auth, signIn } from "@/infra/auth";
 import { flags } from "@/infra/env";
-import { getProjectDetail } from "@/infra/store";
+import { getProjectDetail, getProjectDiscussion } from "@/infra/store";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
@@ -35,8 +37,15 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const { id } = await params;
   if (!flags.hasDb || !ProjectId.safeParse(id).success) notFound();
 
-  const project = await getProjectDetail(id);
+  const [project, session] = await Promise.all([getProjectDetail(id), auth()]);
   if (!project) notFound();
+  const discussion = await getProjectDiscussion(id, session?.githubId);
+  const viewerBuilderId = discussion.viewerBuilderId;
+  const isProjectOwner = viewerBuilderId === project.ownerBuilderId;
+  const signInAction = async () => {
+    "use server";
+    await signIn("github", { redirectTo: `/projects/${id}` });
+  };
 
   return (
     <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-12">
@@ -158,6 +167,22 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           </footer>
         </article>
       </div>
+      <ProjectDiscussion
+        projectId={id}
+        initialComments={discussion.comments.map((comment) => ({
+          id: comment.id,
+          body: comment.body,
+          createdAt: comment.createdAt.toISOString(),
+          author: comment.author,
+          canDelete:
+            isProjectOwner || viewerBuilderId === comment.builderId,
+        }))}
+        initialReactionCounts={discussion.reactionCounts}
+        initialViewerReactions={discussion.viewerReactions}
+        commentLimit={discussion.commentLimit}
+        signedIn={Boolean(session?.githubId && session.login)}
+        signInAction={signInAction}
+      />
     </main>
   );
 }

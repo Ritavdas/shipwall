@@ -18,6 +18,7 @@ Every game reward comes from **identity + the project link** — never a new fie
 - **Ship Wall** — submit and your card flips onto the projected live wall.
 - **Auto share-card** — a `/api/share/[id]` OG image ("I shipped X at [city] 🚀"), one tap to post. The reward is an _output_, not more input.
 - **Durable project pages** — every wall card opens `/projects/[id]`, with clear demo/source actions and an accessible gallery for images, PDF decks, and privacy-conscious YouTube, Vimeo, or Loom embeds.
+- **Focused project feedback** — public project pages show a compact comment thread and `Support`, `Celebrate`, and `Insightful` counts. GitHub-authenticated builders can comment and react without turning the wall into a social feed.
 - **Auto-badges** — First Ship, AI Builder (LLM deps detected), Full-Stack, Serial Builder — all derived, nothing self-reported.
 - **City counter** — projects shipped, the exact KPI, live on the wall.
 - **Needs chips** — one tap (`Compute / API credits / Design / Distribution / Mentorship`) builds the grant/credit dataset without feeling like a form.
@@ -68,6 +69,15 @@ no ordered media rows exist, the detail page treats the legacy screenshot as the
 first image. New submissions write both an ordered media list and the first image
 back to `screenshot_url` for wall-card compatibility.
 
+The comments/reactions layer is additive too. A schema push creates the
+`project_reaction_kind` enum plus `project_comments` and `project_reactions`;
+it does not rewrite existing events, builders, submissions, badges, or media.
+Both interaction tables cascade when their project or builder is deleted.
+`project_reactions` has a database uniqueness constraint on
+`(submission_id, builder_id, kind)`, and indexed project/author foreign keys
+keep reads and cascades bounded. Deploy the schema push before deploying this
+application version so project pages do not query tables that are not present.
+
 ### 4. Run
 
 ```bash
@@ -78,6 +88,25 @@ npm run dev
 - Builders scan the QR → `/e/<slug>/submit`.
 - Live wall (project this): `/e/<slug>`.
 - Export the dataset: `/api/export?event=<slug>&format=csv&token=<ADMIN_TOKEN>`.
+
+### Project interaction API
+
+Project pages read the latest 50 comments in deterministic chronological order
+and all reaction totals directly on the server. Mutations are uncached Route
+Handlers and revalidate the affected `/projects/[id]` page:
+
+- `POST /api/projects/:id/comments` with `{ "body": "..." }` — GitHub session required; comments are whitespace-normalized plain text, limited to 1,000 characters, and rate-limited to 5 per builder per 10-minute window.
+- `DELETE /api/projects/:id/comments/:commentId` — allowed for the comment author or the project owner. Organizers may instead pass the existing `x-admin-token` header; the token is checked server-side by the same `ADMIN_TOKEN` boundary used by event/export APIs.
+- `PUT /api/projects/:id/reactions/:kind` and `DELETE /api/projects/:id/reactions/:kind` — idempotently add/remove `support`, `celebrate`, or `insightful` for the signed-in builder.
+
+Organizer moderation example (prefer a header so the token does not enter URL
+or browser history):
+
+```bash
+curl -X DELETE \
+  -H "x-admin-token: $ADMIN_TOKEN" \
+  "$APP_URL/api/projects/<project-uuid>/comments/<comment-uuid>"
+```
 
 ## Deploy
 
@@ -98,14 +127,14 @@ change. That's the whole migration path.
 ## Architecture
 
 - `src/app/**` — Next routes: pages (`/`, `/admin`, `/e/[slug]`, `/e/[slug]/submit`, `/projects/[id]`) + route handlers (`/api/*`).
-- `src/domain/**` — pure logic: `needs`, `badges`, `stack` (AI/full-stack detection), `enrichment`, and media URL/embed normalization.
-- `src/infra/**` — boundaries: `env` (Zod), `db` (Drizzle + Neon, including ordered `project_media` rows), `auth` (Auth.js), `github` + `microlink` + `ai` enrichment, `store` (data access), `admin`.
-- `src/components/**` — `SubmitForm`, `MediaGallery`, `Wall`.
+- `src/domain/**` — pure logic: `needs`, `badges`, `stack` (AI/full-stack detection), `enrichment`, media URL/embed normalization, and Zod interaction validation.
+- `src/infra/**` — boundaries: `env` (Zod), `db` (Drizzle + Neon, including ordered media and constrained project interactions), `auth`/`identity` (Auth.js plus builder upserts), `github` + `microlink` + `ai` enrichment, `store` (data access), `admin`.
+- `src/components/**` — `SubmitForm`, `MediaGallery`, `ProjectDiscussion`, `Wall`.
 
 Convention mirrors the taskmanagebot layout (strict TS, Zod-typed env boundary,
 Vercel AI SDK → OpenRouter, `domain` / `infra` split).
 
 ## Roadmap (v2)
 
-Cross-city streaks & levels · reactions on cards · opt-in fine-grained GitHub
+Cross-city streaks & levels · opt-in fine-grained GitHub
 App (per-repo grant) · realtime wall (websocket instead of polling).

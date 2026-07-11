@@ -8,7 +8,9 @@ import {
   pgEnum,
   index,
   uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * ShipWall schema. Kept intentionally small: identity + the project link
@@ -41,6 +43,12 @@ export const projectMediaKind = pgEnum("project_media_kind", [
   "image",
   "pdf",
   "video",
+]);
+
+export const projectReactionKind = pgEnum("project_reaction_kind", [
+  "support",
+  "celebrate",
+  "insightful",
 ]);
 
 export const submissions = pgTable(
@@ -94,6 +102,61 @@ export const projectMedia = pgTable(
   ],
 );
 
+export const projectComments = pgTable(
+  "project_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => submissions.id, { onDelete: "cascade" }),
+    builderId: uuid("builder_id")
+      .notNull()
+      .references(() => builders.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("project_comments_submission_created_idx").on(
+      t.submissionId,
+      t.createdAt,
+      t.id,
+    ),
+    index("project_comments_builder_created_idx").on(t.builderId, t.createdAt),
+    check(
+      "project_comments_body_length_check",
+      sql`char_length(${t.body}) between 1 and 1000`,
+    ),
+  ],
+);
+
+export const projectReactions = pgTable(
+  "project_reactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => submissions.id, { onDelete: "cascade" }),
+    builderId: uuid("builder_id")
+      .notNull()
+      .references(() => builders.id, { onDelete: "cascade" }),
+    kind: projectReactionKind("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("project_reactions_unique_idx").on(
+      t.submissionId,
+      t.builderId,
+      t.kind,
+    ),
+    index("project_reactions_submission_kind_idx").on(t.submissionId, t.kind),
+    index("project_reactions_builder_idx").on(t.builderId),
+  ],
+);
+
 export const badges = pgTable("badges", {
   id: uuid("id").primaryKey().defaultRandom(),
   builderId: uuid("builder_id")
@@ -112,4 +175,6 @@ export type Event = typeof events.$inferSelect;
 export type Builder = typeof builders.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
 export type ProjectMedia = typeof projectMedia.$inferSelect;
+export type ProjectComment = typeof projectComments.$inferSelect;
+export type ProjectReaction = typeof projectReactions.$inferSelect;
 export type Badge = typeof badges.$inferSelect;
