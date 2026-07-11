@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+const optionalUrl = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().url().optional(),
+);
+
 /**
  * Zod-parsed environment. Every credential is optional so the app boots
  * with zero config — features degrade gracefully when keys are missing.
@@ -13,6 +18,11 @@ const schema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_MODEL: z.string().default("anthropic/claude-3.5-haiku"),
   OPENROUTER_BASE_URL: z.string().default("https://openrouter.ai/api/v1"),
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
+  R2_PUBLIC_URL: optionalUrl,
   APP_URL: z.string().default("http://localhost:3000"),
   ADMIN_TOKEN: z.string().optional(),
 });
@@ -25,6 +35,11 @@ export const env = schema.parse({
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
   OPENROUTER_BASE_URL: process.env.OPENROUTER_BASE_URL,
+  R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
+  R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+  R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+  R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
+  R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
   APP_URL: process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL,
   ADMIN_TOKEN: process.env.ADMIN_TOKEN,
 });
@@ -34,4 +49,11 @@ export const flags = {
   hasDb: Boolean(env.DATABASE_URL),
   hasAuth: Boolean(env.AUTH_GITHUB_ID && env.AUTH_GITHUB_SECRET),
   hasAI: Boolean(env.OPENROUTER_API_KEY),
+  hasUploads: Boolean(
+    env.R2_ACCOUNT_ID &&
+      env.R2_ACCESS_KEY_ID &&
+      env.R2_SECRET_ACCESS_KEY &&
+      env.R2_BUCKET_NAME &&
+      env.R2_PUBLIC_URL,
+  ),
 } as const;

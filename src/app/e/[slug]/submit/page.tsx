@@ -60,6 +60,7 @@ export default async function SubmitPage({
           login={session.login}
           avatarUrl={session.avatarUrl}
           appUrl={env.APP_URL}
+          uploadsEnabled={flags.hasUploads}
         />
       )}
     </main>

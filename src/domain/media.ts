@@ -38,11 +38,15 @@ export const projectMediaInputSchema = z
       });
     }
 
-    if (media.kind === "video" && !getVideoEmbed(media.url)) {
+    if (
+      media.kind === "video" &&
+      !getVideoEmbed(media.url) &&
+      !isDirectVideoUrl(media.url)
+    ) {
       context.addIssue({
         code: "custom",
         path: ["url"],
-        message: "Use a YouTube, Vimeo, or Loom video URL.",
+        message: "Use an uploaded MP4, MOV, WebM, or a YouTube, Vimeo, or Loom URL.",
       });
     }
   });
@@ -61,11 +65,23 @@ export function normalizeProjectMedia(
   if (input.kind !== "video") return input;
 
   const video = getVideoEmbed(input.url);
-  if (!video) {
+  if (!video && !isDirectVideoUrl(input.url)) {
     throw new Error("Unsupported video URL.");
   }
 
-  return { ...input, url: video.canonicalUrl };
+  return video ? { ...input, url: video.canonicalUrl } : input;
+}
+
+export function isDirectVideoUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      /\.(?:m4v|mov|mp4|webm)$/i.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function getVideoEmbed(value: string): VideoEmbed | null {

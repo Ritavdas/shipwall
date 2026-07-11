@@ -4,22 +4,27 @@ import Link from "next/link";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import type { Enrichment } from "@/domain/enrichment";
-import type { ProjectMediaInput, ProjectMediaKind } from "@/domain/media";
+import {
+  ProjectMediaEditor,
+  type EditableMedia,
+} from "@/components/ProjectMediaEditor";
+import { VoiceInputButton } from "@/components/VoiceInputButton";
 import { NEEDS } from "@/domain/needs";
 
 type Phase = "idle" | "enriching" | "preview" | "submitting" | "done" | "error";
-type EditableMedia = ProjectMediaInput & { id: string };
 
 export function SubmitForm({
   eventSlug,
   login,
   avatarUrl,
   appUrl,
+  uploadsEnabled,
 }: {
   eventSlug: string;
   login: string;
   avatarUrl?: string | null;
   appUrl: string;
+  uploadsEnabled: boolean;
 }) {
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -187,11 +192,26 @@ export function SubmitForm({
             />
           ) : null}
 
-          <MediaEditor media={media} setMedia={setMedia} title={title} />
+          <ProjectMediaEditor
+            media={media}
+            setMedia={setMedia}
+            title={title}
+            uploadsEnabled={uploadsEnabled}
+          />
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted">Project</label>
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="project-title" className="text-xs text-muted">
+                Project
+              </label>
+              <VoiceInputButton
+                fieldName="project title"
+                disabled={phase === "submitting"}
+                onTranscript={setTitle}
+              />
+            </div>
             <input
+              id="project-title"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -200,13 +220,27 @@ export function SubmitForm({
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted">What it does</label>
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="project-description" className="text-xs text-muted">
+                What it does
+              </label>
+              <VoiceInputButton
+                fieldName="what the project does"
+                disabled={phase === "submitting"}
+                onTranscript={setDescription}
+              />
+            </div>
             <textarea
+              id="project-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               className="resize-none rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-accent"
             />
+            <p className="text-[11px] leading-4 text-muted">
+              Voice uses your browser&apos;s speech recognition, so there is no
+              model download. Availability and audio processing depend on the browser.
+            </p>
           </div>
 
           <div className="flex flex-col gap-1">
@@ -291,250 +325,6 @@ export function SubmitForm({
       ) : null}
     </div>
   );
-}
-
-function MediaEditor({
-  media,
-  setMedia,
-  title,
-}: {
-  media: EditableMedia[];
-  setMedia: React.Dispatch<React.SetStateAction<EditableMedia[]>>;
-  title: string;
-}) {
-  function add(kind: ProjectMediaKind) {
-    if (media.length >= 12) return;
-    setMedia((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        kind,
-        url: "",
-        altText: kind === "image" ? `${title || "Project"} image` : "",
-        caption: "",
-      },
-    ]);
-  }
-
-  function update(id: string, patch: Partial<ProjectMediaInput>) {
-    setMedia((current) =>
-      current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-    );
-  }
-
-  function move(index: number, delta: -1 | 1) {
-    setMedia((current) => {
-      const target = index + delta;
-      if (target < 0 || target >= current.length) return current;
-      const next = [...current];
-      [next[index], next[target]] = [next[target]!, next[index]!];
-      return next;
-    });
-  }
-
-  return (
-    <details className="rounded-xl border border-border bg-card p-4">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold">
-        <span>Project media (optional)</span>
-        <span className="shrink-0 text-xs font-normal text-muted">
-          {media.length}/12
-        </span>
-      </summary>
-      <div className="mt-2">
-        <p className="text-xs leading-5 text-muted">
-          Your derived screenshot is already included. Add a deck or video only
-          if it helps tell the story.
-        </p>
-
-        {media.length === 0 ? (
-          <p className="mt-4 rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted">
-            No media selected. The project can still be published.
-          </p>
-        ) : (
-          <div className="mt-4 flex flex-col gap-3">
-          {media.map((item, index) => {
-            const prefix = `media-${item.id}`;
-            return (
-              <fieldset
-                key={item.id}
-                className="min-w-0 rounded-lg border border-border p-3"
-              >
-                <legend className="px-1 text-xs font-medium text-muted">
-                  {index + 1}. {mediaKindLabel(item.kind)}
-                </legend>
-
-                <div className="grid min-w-0 gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
-                  <div>
-                    <label
-                      htmlFor={`${prefix}-kind`}
-                      className="text-xs text-muted"
-                    >
-                      Type
-                    </label>
-                    <select
-                      id={`${prefix}-kind`}
-                      value={item.kind}
-                      onChange={(event) => {
-                        const kind = event.target.value as ProjectMediaKind;
-                        update(item.id, {
-                          kind,
-                          altText:
-                            kind === "image" && !item.altText
-                              ? `${title || "Project"} image`
-                              : item.altText,
-                        });
-                      }}
-                      className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm"
-                    >
-                      <option value="image">Image</option>
-                      <option value="pdf">PDF deck</option>
-                      <option value="video">Video</option>
-                    </select>
-                  </div>
-
-                  <div className="min-w-0">
-                    <label
-                      htmlFor={`${prefix}-url`}
-                      className="text-xs text-muted"
-                    >
-                      HTTPS URL
-                    </label>
-                    <input
-                      id={`${prefix}-url`}
-                      type="url"
-                      required
-                      value={item.url}
-                      onChange={(event) =>
-                        update(item.id, { url: event.target.value })
-                      }
-                      placeholder={mediaUrlPlaceholder(item.kind)}
-                      className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div className="min-w-0">
-                    <label
-                      htmlFor={`${prefix}-alt`}
-                      className="text-xs text-muted"
-                    >
-                      {item.kind === "image"
-                        ? "Image description"
-                        : "Accessible title (optional)"}
-                    </label>
-                    <input
-                      id={`${prefix}-alt`}
-                      required={item.kind === "image"}
-                      value={item.altText}
-                      onChange={(event) =>
-                        update(item.id, { altText: event.target.value })
-                      }
-                      placeholder={
-                        item.kind === "image"
-                          ? "Describe what the image shows"
-                          : "Name this media"
-                      }
-                      className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-sm"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <label
-                      htmlFor={`${prefix}-caption`}
-                      className="text-xs text-muted"
-                    >
-                      Caption (optional)
-                    </label>
-                    <input
-                      id={`${prefix}-caption`}
-                      value={item.caption}
-                      onChange={(event) =>
-                        update(item.id, { caption: event.target.value })
-                      }
-                      placeholder="Add context for viewers"
-                      className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => move(index, -1)}
-                    disabled={index === 0}
-                    className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
-                  >
-                    Move up
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => move(index, 1)}
-                    disabled={index === media.length - 1}
-                    className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
-                  >
-                    Move down
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setMedia((current) =>
-                        current.filter((entry) => entry.id !== item.id),
-                      )
-                    }
-                    className="min-h-11 rounded-lg border border-border px-3 text-xs text-red-300 hover:border-red-300"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </fieldset>
-            );
-          })}
-          </div>
-        )}
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => add("image")}
-            disabled={media.length >= 12}
-            className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
-          >
-            + Image
-          </button>
-          <button
-            type="button"
-            onClick={() => add("pdf")}
-            disabled={media.length >= 12}
-            className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
-          >
-            + PDF deck
-          </button>
-          <button
-            type="button"
-            onClick={() => add("video")}
-            disabled={media.length >= 12}
-            className="min-h-11 rounded-lg border border-border px-3 text-xs hover:border-accent disabled:opacity-40"
-          >
-            + Video
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-muted">
-          Video embeds support YouTube, Vimeo, and Loom.
-        </p>
-      </div>
-    </details>
-  );
-}
-
-function mediaKindLabel(kind: ProjectMediaKind) {
-  if (kind === "pdf") return "PDF deck";
-  return kind[0]!.toUpperCase() + kind.slice(1);
-}
-
-function mediaUrlPlaceholder(kind: ProjectMediaKind) {
-  if (kind === "video") return "https://youtube.com/watch?v=…";
-  if (kind === "pdf") return "https://example.com/deck.pdf";
-  return "https://example.com/screenshot.png";
 }
 
 function DoneCard({

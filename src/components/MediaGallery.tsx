@@ -2,7 +2,7 @@
 
 import Image, { type ImageLoader } from "next/image";
 import { useState } from "react";
-import { getVideoEmbed } from "@/domain/media";
+import { getVideoEmbed, isDirectVideoUrl } from "@/domain/media";
 import type { ProjectMediaItem } from "@/infra/store";
 
 const passthroughLoader: ImageLoader = ({ src }) => src;
@@ -173,6 +173,26 @@ function MediaFrame({
   }
 
   const video = getVideoEmbed(media.url);
+  if (!video && isDirectVideoUrl(media.url)) {
+    return (
+      <figure>
+        <div className="aspect-video overflow-hidden rounded-2xl border border-border bg-black">
+          <video
+            src={media.url}
+            controls
+            playsInline
+            preload="metadata"
+            className="h-full w-full"
+          >
+            <a href={media.url}>Open video</a>
+          </video>
+        </div>
+        <figcaption className="mt-2 text-sm text-muted">
+          {media.caption || media.altText || "Project video"}
+        </figcaption>
+      </figure>
+    );
+  }
   if (!video) {
     return (
       <div className="rounded-2xl border border-border bg-card p-6">
